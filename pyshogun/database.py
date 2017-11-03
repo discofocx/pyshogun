@@ -5,35 +5,13 @@ import sys
 import filecmp
 import shutil
 import time
+import logging
 
-DEBUG = True
-
-
-def compare_directories(source_dir, target_dir):
-    """
-    Compare the target directory against the source directory,
-    if new files are found in the target directory, update the
-    target directory
-    :param source_dir:
-    :param target_dir:
-    :return:
-    """
-    ignore = [os.path.basename(source_dir) + '.enf', os.path.basename(target_dir) + '.enf', 'RCS', 'CVS', 'tags']
-
-    comparison = filecmp.dircmp(source_dir, target_dir, ignore=ignore)
-
-    print(comparison.report_full_closure())
-    print(comparison.left_list)
-    print(comparison.right_list)
-    print(comparison.left_only)
-
-    for subdir in comparison.left_only:
-        os.mkdir(os.path.join(target_dir, subdir))
-    print('Created {0} new dirs'.format(len(comparison.left_only)))
+DEBUG = False
 
 
 def _sync_project_level(comparison_obj):
-    """
+    """b
     Generate lists of new directories and new files at Project level
     :type comparison_obj: file.cmp.dircmp object
     :param comparison_obj: The comparison on where we operate
@@ -142,10 +120,13 @@ def _process_sync(tree_index, tree, dirs, files):
     """
 
     if len(dirs) == 0 and len(files) == 0:
-        print('Databases at ({level}) level are synced'.format(level=tree[tree_index]))
+        msg = 'Databases at ({level}) level are synced'.format(level=tree[tree_index])
+        print(msg)
+        send_to_log(msg)
     else:
         for index, l_dir in enumerate(dirs):
             os.mkdir(l_dir)
+            send_to_log('Successfully created new dir: {dir}'.format(dir=l_dir))
             progress = ((index + 1) * 100) / len(dirs)
             sys.stdout.write('\rDirectory Sync Progress at ({level}) level {progress}% - '.format(level=tree[tree_index],
                                                                                                progress=progress))
@@ -157,6 +138,8 @@ def _process_sync(tree_index, tree, dirs, files):
         for index, l_file in enumerate(files):
             source_file, destination_file = l_file
             shutil.copy(source_file, destination_file)
+            send_to_log('Successfully copied {source} to {destination}'.format(source=source_file,
+                                                                               destination=destination_file))
             progress = ((index + 1) * 100) / len(files)
             sys.stdout.write('\rFile Sync Progress at ({level}) level {progress}% - '.format(level=tree[tree_index],
                                                                                           progress=progress))
@@ -164,6 +147,15 @@ def _process_sync(tree_index, tree, dirs, files):
             if DEBUG:
                 time.sleep(0.2)
         print('Created ({files}) new files at ({level})'.format(files=len(files), level=tree[tree_index]))
+
+
+def send_to_log(message):
+    """
+    Logs a message to the main logger
+    :param message: The message that you want to write out
+    :return: None
+    """
+    logging.info(message)
 
 
 def sync(source_database, target_database):
@@ -175,7 +167,8 @@ def sync(source_database, target_database):
     :param target_database: string - full path to the target
     :return: boolean - True if the operation was successful
     """
-    # compare_directories(source_database, target_database)
+    # Set logger
+    logging.basicConfig(filename=os.path.join(target_database, 'auto_sync_log.log'), level=logging.DEBUG)
 
     # Files or patterns to ignore
     ignore = [os.path.basename(source_database) + '.enf',
@@ -188,6 +181,7 @@ def sync(source_database, target_database):
                      3: 'Takes'}
 
     # Attempt to sync
+    send_to_log('=== New sync operation started ===')
     for index, level in database_tree.iteritems():
         if index == 0:
             project_comp = filecmp.dircmp(source_database, target_database, ignore=ignore)
